@@ -148,7 +148,7 @@ func (u *GreetUsecase) Greet() string {
     }
 }
 ```
-このような場合には、
+このような場合には、インターフェイスを使用します
 ```golang
 package mytime
 
@@ -156,6 +156,79 @@ import "time"
 
 type MyTime struct {}
 
+type TimeIF interface {
+	GetNow() time.Time
+}
+
+func NewTime() *Time {
+	return &Time{}
+}
+
+func GetNow() time.Time {
+	return GetCurrentTime()
+}
+
 func GetCurrentTime() time.Time {
     return time.Now()
 }
+```
+
+使用する場合、
+```go
+package usecase
+
+type GreetUsecase struct {
+    repo repository.GreetRepository,
+    time mytime.TimeIF,
+}
+
+func NewGreetUsecase(repo repository.GreetRepository, time mytime.TimeIF) *GreetUsecase {
+    return &GreetUsecase{
+        repo: repo,
+        time: time,
+    }
+}
+
+func (u *GreetUsecase) Greet() string {
+    now := u.time.GetNow()
+    hour := now.Hour()
+
+    if hour < 12 {
+        return "おはようございます！"
+    } else if hour < 18 {
+        return "こんにちは！"
+    } else {
+        return "こんばんは！"
+    }
+}
+```
+
+テストは下記のように書きます
+```golang
+type timeMock struct {
+    mock.Mock
+}
+
+func (_m *timeMock) GetNow() {
+    res := _m
+}
+func TestGreet(t *testing.T) {
+    cases := map[string]struct {
+        now  time.Time
+        want string
+    }{
+        {time.Date(2023, 1, 1, 9, 0, 0, 0, time.UTC), "おはようございます！"},
+        {time.Date(2023, 1, 1, 15, 0, 0, 0, time.UTC), "こんにちは！"},
+        {time.Date(2023, 1, 1, 19, 0, 0, 0, time.UTC), "こんばんは！"},
+    }
+
+    for testName, tt := range cases {
+        // `greetTime`に任意の時刻を返却する関数を再代入する
+        greetTime = func() time.Time {
+            return tt.now
+        }
+        res := hoge.Greet()
+        assert.Equal(t, tt.want, res)
+    }
+}
+```
