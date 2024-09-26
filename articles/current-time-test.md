@@ -119,7 +119,7 @@ func TestGreet(t *testing.T) {
 こうすることで、`Greet()`内で実行される`greetTime()`の返り値は`tt.now`の値が返却されるようになるので任意の値でテストが実行されます。
 比較的簡単に実装できますが、グローバル変数を使用しているのでその扱いには注意してください！
 
-## DIを使用する
+## モックを使用する
 レイヤードアーキテクチャを使用している場合などにこの方法が使用できます。  
 例えばユースケース層に`Greet()`があるとします。
 ```golang
@@ -148,7 +148,8 @@ func (u *GreetUsecase) Greet() string {
     }
 }
 ```
-このような場合には、インターフェイスを使用します
+このような場合に、テスト時に`myytime.GetCurrentTime()`をモックして任意の値を返すようにしてみます。  
+`GetNow`メソッドを持つインターフェースを作成し、これを用いて時刻を取得するようにします。
 ```golang
 package mytime
 
@@ -161,10 +162,10 @@ type TimeIF interface {
 }
 
 func NewTime() *Time {
-	return &Time{}
+	return &MyTime{}
 }
 
-func GetNow() time.Time {
+func (t *MyTime)GetNow() time.Time {
 	return GetCurrentTime()
 }
 
@@ -173,9 +174,11 @@ func GetCurrentTime() time.Time {
 }
 ```
 
-使用する場合、
+先ほどの`Greet()`では、`GreetUsecase`の構造体に定義した`time`経由で現在時刻を取得するようにします。
 ```go
 package usecase
+
+import "mytime"
 
 type GreetUsecase struct {
     repo repository.GreetRepository,
@@ -203,14 +206,16 @@ func (u *GreetUsecase) Greet() string {
 }
 ```
 
-テストは下記のように書きます
+テストでは下記のようにモックを作成し、`NewGreetUsecase()`の時にモック関数を定義するようにします。  
+`timeMock.On("GetNow").Return(tt.now)`によって、`GetNow`が呼ばれたら、事前に定義した`tt.now`の値を返却するという振る舞いをモックします。
 ```golang
 type timeMock struct {
     mock.Mock
 }
 
 func (_m *timeMock) GetNow() {
-    res := _m
+    res := m.Called()
+	return res.Get(0).(time.Time)
 }
 func TestGreet(t *testing.T) {
     cases := map[string]struct {
@@ -223,11 +228,12 @@ func TestGreet(t *testing.T) {
     }
 
     for testName, tt := range cases {
-        // `greetTime`に任意の時刻を返却する関数を再代入する
-        greetTime = func() time.Time {
-            return tt.now
-        }
-        res := hoge.Greet()
+        timeMock := new(TimeMock)
+        timeMock.On("GetNow").Return(tt.now)
+
+        greetUsecase := usecase.NewGreetUsecase(nil, timeMock)
+
+        res := greetUsecase.Greet()
         assert.Equal(t, tt.want, res)
     }
 }
